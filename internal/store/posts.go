@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 
 	"github.com/lib/pq"
 )
@@ -16,6 +17,8 @@ type Post struct {
 	Tags      []string `json:"tags"`
 	CreatedAt string   `json:"created_at"`
 	UpdatedAt string   `json:"updated_at"`
+	Comments []Comment `json:"comments"`
+	User    User     	`json:"user"`
 }
 
 type PostgresPostsStore struct {
@@ -74,4 +77,38 @@ func (store *PostgresPostsStore) GetByID(ctx context.Context, postID int64) (*Po
 	}
 
 	return &post, nil
+}
+
+func (store *PostgresPostsStore) Delete(ctx context.Context, postID int64) error {
+	query := `
+	DELETE FROM posts
+	WHERE id = $1
+	`
+
+	res, err := store.db.ExecContext(ctx, query, postID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	log.Printf("Rows affected: %d", rowsAffected)
+	return nil
+}
+
+func (store *PostgresPostsStore) UpdatePostByID(ctx context.Context, postID int64, post *Post) (*Post, error){
+	query := `
+	UPDATE posts
+	SET content = $1, title = $2, tags = $3
+	WHERE id = $4
+	RETURNING updated_at
+	`
+
+	err := store.db.QueryRowContext(ctx, query, post.Content, post.Title, pq.Array(post.Tags), postID).Scan(&post.UpdatedAt)
+	if err != nil {
+		return nil,err
+	}
+	return post, nil
 }
